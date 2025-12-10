@@ -133,10 +133,16 @@ class LSLoraLayer(LoraLayer):
             - ∂φ/∂a₃ = cos(πx)
             - ∂φ/∂σ = -z/σ² · sech²(z/σ) · [a₁ + πa₂cos(πx) - πa₃sin(πx)]
         """
-        # Get parameters and move to device
+        # Get parameters - move to device only if needed
         params = self.fourier_params[adapter_name]
-        coeffs = params.weight.to(z.device)
-        sigma = params.sigma.to(z.device)
+
+        # Only transfer if on different device (usually already correct after first pass)
+        if params.weight.device != z.device:
+            params.weight.data = params.weight.data.to(z.device)
+            params.sigma.data = params.sigma.data.to(z.device)
+
+        coeffs = params.weight
+        sigma = params.sigma
 
         # Safe sigma: prevent division by zero, ensure sigma > 0
         sigma_safe = torch.abs(sigma) + 1e-6
@@ -283,9 +289,11 @@ class LSLoraModel(LoraModel):
         Returns:
             Scalar tensor with regularization loss
         """
-        total_loss = 0.0
-        count = 0
+        losses = []
         identity = torch.tensor([0.0, 1.0, 0.0, 0.0])
+
+        # Get target device (for multi-GPU compatibility)
+        target_device = next(self.parameters()).device
 
         for module in self.modules():
             if isinstance(module, LSLoraLayer):
@@ -294,14 +302,14 @@ class LSLoraModel(LoraModel):
                     target = identity.to(coeffs.device)
                     # MSE loss: mean((coeffs - identity)²)
                     loss = torch.mean((coeffs - target) ** 2)
-                    total_loss += loss
-                    count += 1
+                    # Move to target device (fixes multi-GPU device mismatch)
+                    losses.append(loss.to(target_device))
 
-        if count == 0:
-            return torch.tensor(0.0)
+        if len(losses) == 0:
+            return torch.tensor(0.0, device=target_device)
 
-        # Average over all layers
-        return total_loss / count
+        # Stack and average - all on same device now
+        return torch.stack(losses).mean()
 
 # Register the method (keep name "lslora" for backward compatibility)
 # Use prefix="lora_" to match both lora_* and fourier_* parameters
