@@ -131,6 +131,33 @@ def get_peft_model_state_dict(
 
             to_return = {renamed_dora_weights(k): v for k, v in to_return.items()}
 
+    elif config.peft_type == PeftType.LSLORA:
+        # Handle LS-LoRA: includes both standard LoRA parameters and Fourier parameters
+        bias = config.bias
+        if bias == "none":
+            to_return = {k: state_dict[k] for k in state_dict if "lora_" in k}
+        elif bias == "all":
+            to_return = {k: state_dict[k] for k in state_dict if "lora_" in k or "bias" in k}
+        elif bias == "lora_only":
+            to_return = {}
+            for k in state_dict:
+                if "lora_" in k:
+                    to_return[k] = state_dict[k]
+                    bias_name = k.split("lora_")[0] + "bias"
+                    if bias_name in state_dict:
+                        to_return[bias_name] = state_dict[bias_name]
+        else:
+            raise NotImplementedError
+
+        # Filter by adapter name for LoRA parameters
+        to_return = {k: v for k, v in to_return.items() if (("lora_" in k and adapter_name in k) or ("bias" in k))}
+
+        # Add Fourier parameters (critical for LS-LoRA)
+        # Note: Fourier params may not include adapter name in key depending on how ModuleDict is serialized
+        for k, v in state_dict.items():
+            if "fourier_params" in k:
+                to_return[k] = v
+
     elif config.peft_type == PeftType.BOFT:
         bias = config.bias
         if bias == "none":
@@ -516,6 +543,19 @@ def set_peft_model_state_dict(
                         # on a Linux or a Mac-OS system. If they were saved in Linux or Mac-OS, they are already
                         # integers and the following will not affect anything.
                         module.shira_indices[adapter_name] = shira_indices_values.to(torch.int)
+        elif config.peft_type == PeftType.LSLORA:
+            # Handle Fourier parameters for LS-LoRA
+            for name, module in model.named_modules():
+                if hasattr(module, "fourier_params") and adapter_name in module.fourier_params:
+                    # Check for both weight and sigma parameters
+                    # Note: adapter name is NOT included in the saved key format
+                    weight_key = f"{name}.fourier_params.weight"
+                    sigma_key = f"{name}.fourier_params.sigma"
+
+                    if weight_key in peft_model_state_dict:
+                        module.fourier_params[adapter_name].weight.data = peft_model_state_dict.pop(weight_key)
+                    if sigma_key in peft_model_state_dict:
+                        module.fourier_params[adapter_name].sigma.data = peft_model_state_dict.pop(sigma_key)
         elif config.peft_type == PeftType.VERA:
             if config.save_projection and "base_model.vera_A" not in peft_model_state_dict:
                 raise ValueError(

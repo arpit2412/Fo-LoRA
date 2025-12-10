@@ -26,6 +26,7 @@ from .ia3 import IA3Config, IA3Model
 from .ln_tuning import LNTuningConfig, LNTuningModel
 from .loha import LoHaConfig, LoHaModel
 from .lokr import LoKrConfig, LoKrModel
+from .lslora import LSLoraConfig, LSLoraModel
 from .lora import (
     ArrowConfig,
     BdLoraConfig,
@@ -89,6 +90,8 @@ __all__ = [
     "LoHaModel",
     "LoKrConfig",
     "LoKrModel",
+    "LSLoraConfig",
+    "LSLoraModel",
     "LoftQConfig",
     "LoraConfig",
     "LoraModel",
