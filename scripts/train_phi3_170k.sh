@@ -14,7 +14,7 @@ mkdir -p "${OUTPUT_DIR}" "logs"
 
 # Print configuration
 echo "=============================================================================="
-echo "FOURIER LS-LORA TRAINING - PHI-3 ON COMMONSENSE 170K"
+echo "FOURIER LS-LORA TRAINING - PHI-3 ON COMMONSENSE 170K (DDP MODE)"
 echo "=============================================================================="
 echo "Run name: ${RUN_NAME}"
 echo "Output directory: ${OUTPUT_DIR}"
@@ -22,12 +22,14 @@ echo "Log file: ${LOG_FILE}"
 echo "Model: microsoft/Phi-3-mini-4k-instruct"
 echo "Dataset: commonsense_170k.json (170,420 samples)"
 echo "Steps: 3000"
-echo "Batch size: 16"
+echo "Batch size per GPU: 16 (32 total)"
+echo "GPUs: 2 (Data Parallel)"
 echo "=============================================================================="
 echo ""
 
-# Start training
-python train_lslora.py \
+# Start training with DDP (Data Distributed Parallel)
+# torchrun automatically sets WORLD_SIZE, RANK, LOCAL_RANK environment variables
+torchrun --nproc_per_node=2 --standalone train_lslora.py \
     --model_name microsoft/Phi-3-mini-4k-instruct \
     --dataset_path dataset/commonsense_170k.json \
     --output_dir "${OUTPUT_DIR}" \

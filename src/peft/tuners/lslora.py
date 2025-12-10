@@ -73,7 +73,14 @@ class LSLoraLayer(LoraLayer):
         # Initialize Fourier parameters for this adapter
         if adapter_name not in self.fourier_params:
             init_sigma = kwargs.get("init_sigma", 1.0)
-            self.fourier_params[adapter_name] = FourierParams(init_sigma=init_sigma)
+            fourier_params = FourierParams(init_sigma=init_sigma)
+
+            # Move to same device as LoRA parameters (critical for DDP)
+            if hasattr(self, 'lora_A') and adapter_name in self.lora_A:
+                device = self.lora_A[adapter_name].weight.device
+                fourier_params = fourier_params.to(device)
+
+            self.fourier_params[adapter_name] = fourier_params
 
     def forward(self, x: torch.Tensor, *args: Any, **kwargs: Any) -> torch.Tensor:
         previous_dtype = x.dtype
