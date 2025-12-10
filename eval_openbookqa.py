@@ -11,23 +11,26 @@ def extract_answer(text):
     """Extract answer from generated text (answer1, answer2, etc.)"""
     text_lower = text.lower()
 
-    # Look for patterns like "answer1", "answer 1", "answer is answer2", etc.
-    patterns = [
-        r'answer\s*(\d)',
-        r'answer\s*is\s*answer\s*(\d)',
-        r'correct\s*answer\s*is\s*answer\s*(\d)',
-        r'\(answer\s*(\d)\)',
+    # IMPORTANT: Check specific patterns FIRST before generic ones
+    # This prevents matching answer options in the question
+    specific_patterns = [
+        r'correct\s*answer\s*is\s*answer\s*(\d)',  # "correct answer is answer2"
+        r'answer\s*is\s*answer\s*(\d)',             # "answer is answer2"
+        r'\(answer\s*(\d)\)',                        # "(answer2)"
     ]
 
-    for pattern in patterns:
+    for pattern in specific_patterns:
         match = re.search(pattern, text_lower)
         if match:
             return f"answer{match.group(1)}"
 
-    # If no pattern found, check for direct mentions
-    for i in range(1, 5):
-        if f"answer{i}" in text_lower:
-            return f"answer{i}"
+    # Fall back to generic pattern, but take the LAST occurrence
+    # (to avoid matching question options)
+    generic_pattern = r'answer\s*(\d)'
+    matches = list(re.finditer(generic_pattern, text_lower))
+    if matches:
+        # Take the last match (most likely the actual answer)
+        return f"answer{matches[-1].group(1)}"
 
     return None
 
